@@ -1,5 +1,7 @@
 # BlueRocket WeChat Channel
 
+[中文文档](README_zh.md)
+
 WeChat channel plugin for [BlueRocket](https://www.loopupai.com/desktop), a desktop AI app empowering teens to learn and build anything. This plugin bridges WeChat messages to the BlueRocket AI coding agent, allowing users to interact with BlueRocket directly through WeChat.
 
 ## Features
