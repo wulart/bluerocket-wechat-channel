@@ -24,6 +24,7 @@ import {
   sendTextMessage,
   getCachedContextToken,
   startTypingKeepalive,
+  downloadAndSaveImage,
   log,
   logError,
 } from "./wechat.js";
@@ -163,7 +164,18 @@ async function main() {
     }
 
     // Send the user's message as a prompt
-    log(`发送到 BlueRocket: "${msg.text.slice(0, 60)}"`);
+    let promptText = msg.text;
+    if (msg.msgType === "image" && msg.imageCdnUrl && msg.imageAesKey) {
+      try {
+        const imagePath = await downloadAndSaveImage(msg.imageCdnUrl, msg.imageAesKey);
+        promptText = `用户发送了一张图片，请使用工具读取并分析该图片: ${imagePath}`;
+        log(`图片已下载: ${imagePath}`);
+      } catch (err) {
+        logError(`图片下载失败: ${String(err)}`);
+      }
+    }
+
+    log(`发送到 BlueRocket: "${promptText.slice(0, 60)}"`);
     const contextToken = getCachedContextToken(msg.senderId);
     const typing = contextToken
       ? startTypingKeepalive(account!.baseUrl, account!.token, msg.senderId, contextToken)
@@ -171,7 +183,7 @@ async function main() {
     try {
       const result = await client.session.prompt({
         path: { id: sessionId },
-        body: { parts: [{ type: "text" as const, text: msg.text }] },
+        body: { parts: [{ type: "text" as const, text: promptText }] },
       });
 
       if (result.error) {

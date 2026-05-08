@@ -128,6 +128,29 @@ function encryptAesEcb(data: Buffer, key: Buffer): Buffer {
   return Buffer.concat([cipher.update(data), cipher.final()]);
 }
 
+function decryptAesEcb(data: Buffer, key: Buffer): Buffer {
+  const decipher = crypto.createDecipheriv("aes-128-ecb", key, null);
+  decipher.setAutoPadding(true);
+  return Buffer.concat([decipher.update(data), decipher.final()]);
+}
+
+// ── Image download ──────────────────────────────────────────────────────────
+
+const IMAGE_TMP_DIR = path.join(CREDENTIALS_DIR, "tmp");
+
+export async function downloadAndSaveImage(cdnUrl: string, aesKeyHex: string): Promise<string> {
+  const res = await fetch(cdnUrl, { signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`Image download failed: ${res.status}`);
+  const encrypted = Buffer.from(await res.arrayBuffer());
+  const key = Buffer.from(aesKeyHex, "hex");
+  const decrypted = decryptAesEcb(encrypted, key);
+
+  fs.mkdirSync(IMAGE_TMP_DIR, { recursive: true });
+  const filePath = path.join(IMAGE_TMP_DIR, `img_${Date.now()}.jpg`);
+  fs.writeFileSync(filePath, decrypted);
+  return filePath;
+}
+
 // ── CDN media upload ────────────────────────────────────────────────────────
 
 interface UploadUrlResp {
@@ -422,12 +445,18 @@ const MSG_ITEM_FILE = 4;
 const MSG_ITEM_VIDEO = 5;
 
 interface TextItem { text?: string }
-interface ImageItem {
+interface ImageMedia {
+  full_url?: string;
   aes_key?: string;
-  cdn_url?: string;
-  width?: number;
-  height?: number;
-  media_id?: string;
+  encrypt_query_param?: string;
+}
+interface ImageItem {
+  aeskey?: string;
+  media?: ImageMedia;
+  mid_size?: number;
+  thumb_width?: number;
+  thumb_height?: number;
+  hd_size?: number;
 }
 interface VoiceItem {
   text?: string;
@@ -488,6 +517,8 @@ interface GetUpdatesResp {
 type ExtractedContent = {
   text: string;
   msgType: "text" | "voice" | "image" | "file" | "video" | "unknown";
+  imageCdnUrl?: string;
+  imageAesKey?: string;
 };
 
 function extractContent(msg: WeixinMessage): ExtractedContent | null {
@@ -512,10 +543,17 @@ function extractContent(msg: WeixinMessage): ExtractedContent | null {
       }
       case MSG_ITEM_IMAGE: {
         const img = item.image_item;
-        const dims = img?.width && img?.height
-          ? ` (${img.width}×${img.height})`
+        const cdnUrl = img?.media?.full_url;
+        const aesKey = img?.aeskey;
+        const dims = img?.thumb_width && img?.thumb_height
+          ? ` (${img.thumb_width}×${img.thumb_height})`
           : "";
-        return { text: `[图片${dims}]`, msgType: "image" };
+        return {
+          text: `[图片${dims}]`,
+          msgType: "image",
+          imageCdnUrl: cdnUrl,
+          imageAesKey: aesKey,
+        };
       }
       case MSG_ITEM_FILE: {
         const f = item.file_item;
@@ -684,6 +722,8 @@ export interface InboundMessage {
   groupId?: string;
   isGroup: boolean;
   canReply: boolean;
+  imageCdnUrl?: string;
+  imageAesKey?: string;
 }
 
 export async function startPolling(
@@ -764,6 +804,8 @@ export async function startPolling(
           groupId: groupId ?? undefined,
           isGroup,
           canReply,
+          imageCdnUrl: extracted.imageCdnUrl,
+          imageAesKey: extracted.imageAesKey,
         });
       }
     } catch (err) {
