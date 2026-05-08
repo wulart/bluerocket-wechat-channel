@@ -50,13 +50,6 @@ npx bluerocket-wechat-channel start
 
 通道将连接到 BlueRocket 服务器，并开始监听微信消息。
 
-## 配置文件
-
-| 文件 | 说明 |
-|------|------|
-| `~/.opencode/server.json` | BlueRocket 服务器连接信息（桌面应用自动生成） |
-| `~/.opencode/channels/wechat/account.json` | 微信登录凭据（setup 时创建） |
-
 ## 许可证
 
 [MIT](LICENSE)
